@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Task A
+# -------- TASK A --------
 
 # Load image
 image = cv2.imread("Palimpsest.jpe")
@@ -42,17 +42,20 @@ red_float = red.astype(np.float32)
 green_float = green.astype(np.float32)
 blue_float = blue.astype(np.float32)
 
+# Select a patch of parchment
+x, y, w, h = 120, 30, 100, 80
+
+# Compute alpha from selected patch
+patch_red = red_float[y:y+h, x:x+w]
+patch_green = green_float[y:y+h, x:x+w]
+alpha = np.mean(patch_green) / np.mean(patch_red)
+
 # Estimate parchment/overwriting (Red - Green)
 overwrite_estimate = red_float - green_float
-
-# Scale overwrite estimate to match parchment level in blue
-alpha = np.mean(blue_float) / np.mean(overwrite_estimate)
 overwrite_scaled = overwrite_estimate * alpha
 
 # Isolate underwriting
 underwriting = blue_float - overwrite_scaled
-
-# Normalize result for display
 underwriting = cv2.normalize(underwriting, None, 0, 255, cv2.NORM_MINMAX)
 underwriting = underwriting.astype(np.uint8)
 
