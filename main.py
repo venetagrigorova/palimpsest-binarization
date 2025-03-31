@@ -50,12 +50,11 @@ patch_red = red_float[y:y+h, x:x+w]
 patch_green = green_float[y:y+h, x:x+w]
 alpha = np.mean(patch_green) / np.mean(patch_red)
 
-# Estimate parchment/overwriting (Red - Green)
-overwrite_estimate = red_float - green_float
-overwrite_scaled = overwrite_estimate * alpha
+# Combine channels for suppression
+overwrite_estimate = (red_float + green_float) / 2
+underwriting = blue_float - alpha * overwrite_estimate
 
 # Isolate underwriting
-underwriting = blue_float - overwrite_scaled
 underwriting = cv2.normalize(underwriting, None, 0, 255, cv2.NORM_MINMAX)
 underwriting = underwriting.astype(np.uint8)
 
