@@ -1,13 +1,20 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 # -------- TASK A --------
 
-# Load image
-image = cv2.imread("Palimpsest.jpe")
+# Get the directory of the current script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the full path to the image
+image_path = os.path.join(script_dir, "Palimpsest.jpe")
+
+# Load the image
+image = cv2.imread(image_path)
 if image is None:
-    raise FileNotFoundError("Image file 'Palimpsest.jpe' not found or could not be opened.")
+    raise FileNotFoundError(f"Image file '{image_path}' not found or could not be opened.")
 # Convert image from BGR (OpenCV default) to RGB for visualization
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -50,12 +57,11 @@ patch_red = red_float[y:y+h, x:x+w]
 patch_green = green_float[y:y+h, x:x+w]
 alpha = np.mean(patch_green) / np.mean(patch_red)
 
-# Estimate parchment/overwriting (Red - Green)
-overwrite_estimate = red_float - green_float
-overwrite_scaled = overwrite_estimate * alpha
+# Combine channels for suppression
+overwrite_estimate = (red_float + green_float) / 2
+underwriting = blue_float - alpha * overwrite_estimate
 
 # Isolate underwriting
-underwriting = blue_float - overwrite_scaled
 underwriting = cv2.normalize(underwriting, None, 0, 255, cv2.NORM_MINMAX)
 underwriting = underwriting.astype(np.uint8)
 
@@ -64,3 +70,7 @@ plt.imshow(underwriting, cmap='gray')
 plt.title("Isolated Underwriting")
 plt.axis("off")
 plt.show()
+
+# -------- TASK B --------
+
+
