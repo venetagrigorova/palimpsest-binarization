@@ -70,11 +70,14 @@ underwriting = blue_float - alpha * overwrite_estimate
 underwriting = cv2.normalize(underwriting, None, 0, 255, cv2.NORM_MINMAX)
 underwriting = underwriting.astype(np.uint8)
 
+# Save the isolated underwriting image
+cv2.imwrite("underwriting_isolated.png", underwriting)
+
 figure_underwriting = plt.figure("Isolated Underwriting")
 plt.imshow(underwriting, cmap='gray')
 plt.title("Isolated Underwriting")
 plt.axis("off")
-plt.show(block=False)
+plt.show()
 
 # -------- TASK B: Su et al. Binarization --------
 
