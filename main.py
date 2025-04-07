@@ -105,12 +105,57 @@ def detect_high_contrast(contrast_img):
     # Convert boolean mask to integer (0 or 1)
     return high_contrast_mask.astype(np.uint8)
 
+# Estimate window size and minimum number of points
+def estimate_window_size(contrast_img):
+    high_contrast = detect_high_contrast(contrast_img)
+
+    # Find list of pixel coordinates (y, x) where text edges were detected
+    points = np.argwhere(high_contrast == 1)
+    # If image is very empty, return default values
+    if len(points) < 2:
+        return 15, 5
+
+    # Sort points by row and measure distances between neighboring points on the same text line
+    points = points[np.argsort(points[:, 0])]
+    distances = []
+    for i in range(1, len(points)):
+        if points[i-1, 0] == points[i, 0]: # same row
+            dist = abs(points[i,1] - points[i-1,1])
+            if dist > 0:
+                distances.append(dist)
+
+    # If no valid horizontal distances (blank page, isolated points) return default values
+    if len(distances) == 0:
+        return 15, 5
+
+    # Estimate stroke width
+    stroke_width = int(np.median(distances))
+
+    # Calculate window size with Su et al. formula
+    window_size = max(3 * stroke_width, 15)
+    if window_size % 2 == 0:
+        window_size += 1  # make odd to ensure center pixel
+
+    # Estimate N_min
+    if stroke_width <= 2:
+        N_min = 5  # for tiny strokes we need more points to trust classification
+    elif stroke_width <= 5:
+        N_min = 3 # for normal strokes we use moderate number of points
+    else:
+        N_min = 2 # for thick strokes we can use less points
+
+    return window_size, N_min
+
 # Perform Su et al. binarization on a grayscale document image
-def su_binarization(img, window_size=15, N_min=5):
+def su_binarization(img):
     # Build the contrast image
     contrast_img = compute_contrast_image(img)
 
-    # Detect high contrast points (E) using Otsu threshold
+    # Estimate window size and N_min dynamically
+    window_size, N_min = estimate_window_size(contrast_img)
+    print(f"Estimated window_size: {window_size}, N_min: {N_min}")
+
+    # Build the contrast image
     E = detect_high_contrast(contrast_img)
 
     # Pad the images to handle edges when sliding window
@@ -121,7 +166,7 @@ def su_binarization(img, window_size=15, N_min=5):
 
     # Create an empty image to store binarized result (same size as input)
     bin_img = np.zeros_like(img, dtype=np.uint8)
-    
+
     # Iterate over the image with a sliding window
     height, width = img.shape
     for y in range(height):
@@ -132,12 +177,14 @@ def su_binarization(img, window_size=15, N_min=5):
             # Extract the patch
             patch = padded_img[y0:y1, x0:x1] # Intensity values
             patch_E = padded_E[y0:y1, x0:x1] # High contrast mask values (0 or 1)
-            Ne = np.sum(patch_E == 1) # Count number of high contrast points in the window
+
+            # Count number of high contrast points in the window
+            Ne = np.sum(patch_E == 1)
 
             # If there are enough high contrast points:
             if Ne >= N_min:
                 # Take the pixel values at those points
-                vals = patch[patch_E == 1] 
+                vals = patch[patch_E == 1]
 
                 # Compute the mean and std of the neighboring high contrast pixels
                 mean = np.mean(vals)
