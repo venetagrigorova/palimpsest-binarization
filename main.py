@@ -2,6 +2,11 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from skimage.filters import threshold_otsu
+from skimage.metrics import peak_signal_noise_ratio as compare_psnr
+from sklearn.metrics import precision_score, recall_score, f1_score
+import glob
+import pandas as pd
 
 # -------- TASK A: Separate the Classes --------
 
@@ -73,10 +78,6 @@ plt.show(block=False)
 
 # -------- TASK B: Su et al. Binarization --------
 
-from skimage.filters import threshold_otsu
-from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-from sklearn.metrics import precision_score, recall_score, f1_score
-
 # Compute the contrast image based on local max and min in 3x3 neighborhood
 def compute_contrast_image(img, eps=1e-5):
     kernel_size = 3
@@ -87,7 +88,11 @@ def compute_contrast_image(img, eps=1e-5):
 
     # Contrast formula from Su et al.
     contrast = (f_max - f_min) / (f_max + f_min + eps)
-    return (contrast * 255).astype(np.uint8) # 8-bit contrast image scaled 0–255
+    contrast = np.nan_to_num(contrast, nan=0.0)  # Replace NaN with 0
+
+    # Scale contrast to 0-255 and convert to uint8
+    contrast_scaled = (contrast * 255).clip(0, 255).astype(np.uint8)
+    return contrast_scaled
 
 # Detect high contrast pixels using Otsu's global thresholding
 def detect_high_contrast(contrast_img):
@@ -165,24 +170,35 @@ def evaluate_metrics(pred, gt):
         "PSNR": psnr
     }
 
-input_path = "dibco2009/input/dibco_img0001.tif"
-gt_path = "dibco2009/gt/dibco_img0001_gt.tif"
+# -------- Batch Binarization of DIBCO2009 --------
 
-# Load grayscale image and ground truth
-img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+# Paths to input and ground truth files
+input_folder = "dibco2009/input"
+gt_folder = "dibco2009/gt"
 
-# Apply Su et al. binarization
-bin_img = su_binarization(img)
+# Find all the input images
+input_files = sorted(glob.glob(os.path.join(input_folder, "*.tif")))
+gt_files = sorted(glob.glob(os.path.join(gt_folder, "*.tif")))
 
-# Evaluate metrics against ground truth
-metrics = evaluate_metrics(bin_img, gt)
+# Collect metrics for all the images
+all_metrics = []
 
-for k, v in metrics.items():
-    print(f"{k}: {v:.4f}")
+for input_path, gt_path in zip(input_files, gt_files):
+    img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+    gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
 
-plt.figure("Su Binarization")
-plt.imshow(bin_img, cmap="gray")
-plt.title("Binarized Output (Su et al.)")
-plt.axis("off")
-plt.show()
+    bin_img = su_binarization(img)
+
+    metrics = evaluate_metrics(bin_img, gt)
+    metrics["Image"] = os.path.basename(input_path)
+    all_metrics.append(metrics)
+
+    print(f"Done: {os.path.basename(input_path)}")
+
+results_df = pd.DataFrame(all_metrics)
+print("\nAverage metrics over all images:")
+print(results_df.mean(numeric_only=True))
+
+# Save to CSV
+results_df.to_csv("binarization_results.csv", index=False)
+print("\nResults saved to binarization_results.csv")
