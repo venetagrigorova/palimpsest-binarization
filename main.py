@@ -7,6 +7,10 @@ from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from sklearn.metrics import precision_score, recall_score, f1_score
 import glob
 import pandas as pd
+import torch
+
+from unet.UNet import UNet
+from patchify import patchify, unpatchify
 
 # -------- TASK A: Separate the Classes --------
 
@@ -204,8 +208,11 @@ def su_binarization(img):
     return bin_img
 
 # Compute evaluation metrics (Precision, Recall, F-Score, PSNR)
-def evaluate_metrics(pred, gt):
-    pred_bin = (pred < 128).astype(np.uint8) # Binarize prediction
+def evaluate_metrics(pred, gt, isPredictionBinarized=False):
+    if isPredictionBinarized == False:
+        pred_bin = (pred < 128).astype(np.uint8) # Binarize prediction
+    else:
+        pred_bin = pred.copy() # Prediction is already binarized
     gt_bin = (gt < 128).astype(np.uint8) # Binarize ground truth
 
     precision = precision_score(gt_bin.flatten(), pred_bin.flatten(), zero_division=0)
@@ -223,12 +230,15 @@ def evaluate_metrics(pred, gt):
 # -------- Batch Binarization of DIBCO2009 --------
 
 # Paths to input and ground truth files
-input_folder = "dibco2009/input"
-gt_folder = "dibco2009/gt"
+input_folder = os.path.join("dibco2009","input")
+gt_folder = os.path.join("dibco2009", "gt")
 
 # Find all the input images
-input_files = sorted(glob.glob(os.path.join(input_folder, "*.tif")))
-gt_files = sorted(glob.glob(os.path.join(gt_folder, "*.tif")))
+current_dir = os.path.dirname(__file__)
+input_files = sorted(glob.glob(os.path.join(current_dir, input_folder, "*.tif")))
+gt_files = sorted(glob.glob(os.path.join(current_dir, gt_folder, "*.tif")))
+print("Input files found:", input_files)
+print("Ground truth files found:", gt_files)
 
 # Collect metrics for all the images
 all_metrics = []
@@ -252,3 +262,63 @@ print(results_df.mean(numeric_only=True))
 # Save to CSV
 results_df.to_csv("binarization_results.csv", index=False)
 print("\nResults saved to binarization_results.csv")
+
+# -------- Batch Binarization of DIBCO2009 with UNet --------
+# load unet model
+model = UNet(in_channels=1, out_channels=1)
+current_dir = os.path.dirname(__file__)
+model_path = os.path.join(current_dir, "unet", "unet_binarization_try1_epDP3.pth")
+model.load_state_dict(torch.load(model_path, map_location='cpu'))  # or 'cuda'
+# Move to GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+# Set model to evaluation mode
+model.eval()
+patch_size = 256
+threshold = 0.6
+all_metrics_unet = []
+for input_path, gt_path in zip(input_files, gt_files):
+    image = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE) / 255.0
+    gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+    
+    # get binary image from UNet model
+    H, W = image.shape
+    pad_H = (patch_size - H % patch_size) % patch_size
+    pad_W = (patch_size - W % patch_size) % patch_size
+
+    padded_image = np.pad(image, ((0, pad_H), (0, pad_W)), mode='constant', constant_values=1.0)
+
+    # Patchify
+    img_patches = patchify(padded_image, (patch_size, patch_size), step=patch_size)
+    pred_patches = np.zeros_like(img_patches)
+
+    with torch.no_grad():
+        for i in range(img_patches.shape[0]):
+            for j in range(img_patches.shape[1]):
+                patch = img_patches[i, j]
+                patch_tensor = torch.tensor(patch, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
+                
+                pred = model(patch_tensor)
+                pred = torch.sigmoid(pred).squeeze().cpu().numpy()
+                
+                pred_patches[i, j] = pred
+
+    # Unpatchify and crop back to original size
+    full_pred = unpatchify(pred_patches, padded_image.shape)
+    full_pred = full_pred[:H, :W]
+    binary_pred = (full_pred < threshold).astype(np.float32)
+    
+    metrics = evaluate_metrics(binary_pred, gt, isPredictionBinarized=True)
+    metrics["Image"] = os.path.basename(input_path)
+    all_metrics_unet.append(metrics)
+
+    print(f"Done: {os.path.basename(input_path)}")
+
+results_df = pd.DataFrame(all_metrics_unet)
+print("\nUNet: Average metrics over all images:")
+print(results_df.mean(numeric_only=True))
+
+# Save to CSV
+results_df.to_csv("unet_binarization_results.csv", index=False)
+print("\nUNet: Results saved to unet_binarization_results.csv")
+    
