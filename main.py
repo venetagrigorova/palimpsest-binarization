@@ -267,7 +267,7 @@ print("\nResults saved to binarization_results.csv")
 # load unet model
 model = UNet(in_channels=1, out_channels=1)
 current_dir = os.path.dirname(__file__)
-model_path = os.path.join(current_dir, "unet", "unet_binarization_try1_epDP3.pth")
+model_path = os.path.join(current_dir, "unet", "unet_binarization_ep20.pth")
 model.load_state_dict(torch.load(model_path, map_location='cpu'))  # or 'cuda'
 # Move to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -275,7 +275,7 @@ model.to(device)
 # Set model to evaluation mode
 model.eval()
 patch_size = 256
-threshold = 0.6
+threshold = 0.5
 all_metrics_unet = []
 for input_path, gt_path in zip(input_files, gt_files):
     image = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE) / 255.0

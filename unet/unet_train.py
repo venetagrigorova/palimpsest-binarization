@@ -38,6 +38,7 @@ def train_model(model, train_loader, device, epochs=20, lr=1e-4, save_path="unet
 
             # Forward pass
             preds = model(imgs)
+            preds = torch.sigmoid(preds)
             loss = combined_loss(preds, masks)
 
             # Backpropagation

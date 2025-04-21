@@ -52,7 +52,7 @@ def show_all_patches(data_loader, max_batches=None):
         if max_batches and batch_idx + 1 >= max_batches:
             break
         
-def compare_prediction_to_ground_truth(model, image, mask, device, patch_size=256, threshold=0.6):
+def compare_prediction_to_ground_truth(model, image, mask, device, patch_size=256, threshold=0.5):
     """
     Visually compare U-Net prediction vs ground truth for a full image.
     Assumes image and mask are numpy arrays (grayscale, normalized to 0-1).
@@ -129,7 +129,7 @@ def load_and_train():
     
     # Load model
     model = UNet(in_channels=1, out_channels=1)
-    model_path = os.path.join(current_dir, "unet_binarization_try1_epD.pth")
+    model_path = os.path.join(current_dir, "unet_binarization_ep20.pth")
     # Use GPU if available
     model.load_state_dict(torch.load(model_path, map_location='cpu'))  # or 'cuda'
     # Move to GPU if available
@@ -162,7 +162,7 @@ def load_and_evaluate(model_file, image_file, mask_file):
 
 def main():
     #load_and_train()
-    load_and_evaluate("unet_binarization_try1_epDP3.pth", "dibco_img0010.tif", "dibco_img0010_gt.tif")
+    load_and_evaluate("unet_binarization_ep20.pth", "dibco_img0005.tif", "dibco_img0005_gt.tif")
     
     
     
