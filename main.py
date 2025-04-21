@@ -12,25 +12,25 @@ import torch
 from unet.UNet import UNet
 from patchify import patchify, unpatchify
 
-# -------- TASK A: Separate the Classes --------
+# -------- task a: separate the classes --------
 
-# Get the directory of the current script
+# get the directory of the current script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Construct the full path to the image
+# construct the full path to the image
 image_path = os.path.join(script_dir, "Palimpsest.jpe")
 
-# Load the image
+# load the image
 image = cv2.imread(image_path)
 if image is None:
     raise FileNotFoundError(f"Image file '{image_path}' not found or could not be opened.")
-# Convert image from BGR (OpenCV default) to RGB for visualization
+# convert image from BGR (OpenCV default) to RGB for visualization
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-# Split into R, G, B channels
+# split into R, G, B channels
 red, green, blue = cv2.split(image_rgb)
 
-# Show channels
+# show channels
 figure_RGB_split = plt.figure("RGB Split")
 axes_RGB_split = figure_RGB_split.subplots(1, 4)
 
@@ -53,28 +53,28 @@ axes_RGB_split[3].axis("off")
 figure_RGB_split.tight_layout()
 figure_RGB_split.show()
 
-# Convert RGB to float
+# convert RGB to float
 red_float = red.astype(np.float32)
 green_float = green.astype(np.float32)
 blue_float = blue.astype(np.float32)
 
-# Select a patch of parchment
+# select a patch of parchment
 x, y, w, h = 120, 30, 100, 80
 
-# Compute alpha from selected patch
+# compute alpha from selected patch
 patch_red = red_float[y:y+h, x:x+w]
 patch_green = green_float[y:y+h, x:x+w]
 alpha = np.mean(patch_green) / np.mean(patch_red)
 
-# Combine channels for suppression
+# combine channels for suppression
 overwrite_estimate = (red_float + green_float) / 2
 underwriting = blue_float - alpha * overwrite_estimate
 
-# Isolate underwriting
+# isolate underwriting
 underwriting = cv2.normalize(underwriting, None, 0, 255, cv2.NORM_MINMAX)
 underwriting = underwriting.astype(np.uint8)
 
-# Save the isolated underwriting image
+# save the isolated underwriting image
 cv2.imwrite("underwriting_isolated.png", underwriting)
 
 figure_underwriting = plt.figure("Isolated Underwriting")
@@ -83,46 +83,46 @@ plt.title("Isolated Underwriting")
 plt.axis("off")
 plt.show()
 
-# -------- TASK B: Su et al. Binarization --------
+# -------- task b: su et al. binarization --------
 
-# Compute the contrast image based on local max and min in 3x3 neighborhood
+# compute the contrast image based on local max and min in 3x3 neighborhood
 def compute_contrast_image(img, eps=1e-5):
     kernel_size = 3
 
-    # Maximum filter and minimum filter (dilation and erosion)
+    # maximum filter and minimum filter (dilation and erosion)
     f_max = cv2.dilate(img, np.ones((kernel_size, kernel_size)))
     f_min = cv2.erode(img, np.ones((kernel_size, kernel_size)))
 
-    # Contrast formula from Su et al.
+    # contrast formula from Su et al.
     contrast = (f_max - f_min) / (f_max + f_min + eps)
-    contrast = np.nan_to_num(contrast, nan=0.0)  # Replace NaN with 0
+    contrast = np.nan_to_num(contrast, nan=0.0)  # replace NaN with 0
 
-    # Scale contrast to 0-255 and convert to uint8
+    # scale contrast to 0-255 and convert to uint8
     contrast_scaled = (contrast * 255).clip(0, 255).astype(np.uint8)
     return contrast_scaled
 
-# Detect high contrast pixels using Otsu's global thresholding
+# detect high contrast pixels using Otsu's global thresholding
 def detect_high_contrast(contrast_img):
-    # Find Otsu's threshold
+    # find Otsu's threshold
     thresh = threshold_otsu(contrast_img)
 
-    # Create binary mask for high contrast pixels
+    # create binary mask for high contrast pixels
     high_contrast_mask = contrast_img > thresh
 
-    # Convert boolean mask to integer (0 or 1)
+    # convert boolean mask to integer (0 or 1)
     return high_contrast_mask.astype(np.uint8)
 
-# Estimate window size and minimum number of points
+# estimate window size and minimum number of points
 def estimate_window_size(contrast_img):
     high_contrast = detect_high_contrast(contrast_img)
 
-    # Find list of pixel coordinates (y, x) where text edges were detected
+    # find list of pixel coordinates (y, x) where text edges were detected
     points = np.argwhere(high_contrast == 1)
-    # If image is very empty, return default values
+    # if image is very empty, return default values
     if len(points) < 2:
         return 15, 5
 
-    # Sort points by row and measure distances between neighboring points on the same text line
+    # sort points by row and measure distances between neighboring points on the same text line
     points = points[np.argsort(points[:, 0])]
     distances = []
     for i in range(1, len(points)):
@@ -131,19 +131,19 @@ def estimate_window_size(contrast_img):
             if dist > 0:
                 distances.append(dist)
 
-    # If no valid horizontal distances (blank page, isolated points) return default values
+    # if no valid horizontal distances (blank page, isolated points) return default values
     if len(distances) == 0:
         return 15, 5
 
-    # Estimate stroke width
+    # estimate stroke width
     stroke_width = int(np.median(distances))
 
-    # Calculate window size with Su et al. formula
+    # calculate window size with Su et al. formula
     window_size = max(3 * stroke_width, 15)
     if window_size % 2 == 0:
         window_size += 1  # make odd to ensure center pixel
 
-    # Estimate N_min
+    # estimate N_min
     if stroke_width <= 2:
         N_min = 5  # for tiny strokes we need more points to trust classification
     elif stroke_width <= 5:
@@ -153,57 +153,57 @@ def estimate_window_size(contrast_img):
 
     return window_size, N_min
 
-# Perform Su et al. binarization on a grayscale document image
+# perform Su et al. binarization on a grayscale document image
 def su_binarization(img):
-    # Build the contrast image
+    # build the contrast image
     contrast_img = compute_contrast_image(img)
 
-    # Estimate window size and N_min dynamically
+    # estimate window size and N_min dynamically
     window_size, N_min = estimate_window_size(contrast_img)
     print(f"Estimated window_size: {window_size}, N_min: {N_min}")
 
-    # Build the contrast image
+    # build the contrast image
     E = detect_high_contrast(contrast_img)
 
-    # Pad the images to handle edges when sliding window
+    # pad the images to handle edges when sliding window
     padded_img = cv2.copyMakeBorder(img, window_size//2, window_size//2,
                                     window_size//2, window_size//2, cv2.BORDER_REFLECT)
     padded_E = cv2.copyMakeBorder(E, window_size//2, window_size//2,
                                 window_size//2, window_size//2, cv2.BORDER_REFLECT)
 
-    # Create an empty image to store binarized result (same size as input)
+    # create an empty image to store binarized result (same size as input)
     bin_img = np.zeros_like(img, dtype=np.uint8)
 
-    # Iterate over the image with a sliding window
+    # iterate over the image with a sliding window
     height, width = img.shape
     for y in range(height):
         for x in range(width):
             x0, x1 = x, x + window_size
             y0, y1 = y, y + window_size
 
-            # Extract the patch
-            patch = padded_img[y0:y1, x0:x1] # Intensity values
-            patch_E = padded_E[y0:y1, x0:x1] # High contrast mask values (0 or 1)
+            # extract the patch
+            patch = padded_img[y0:y1, x0:x1] # intensity values
+            patch_E = padded_E[y0:y1, x0:x1] # high contrast mask values (0 or 1)
 
-            # Count number of high contrast points in the window
+            # count number of high contrast points in the window
             Ne = np.sum(patch_E == 1)
 
-            # If there are enough high contrast points:
+            # if there are enough high contrast points:
             if Ne >= N_min:
-                # Take the pixel values at those points
+                # take the pixel values at those points
                 vals = patch[patch_E == 1]
 
-                # Compute the mean and std of the neighboring high contrast pixels
+                # compute the mean and std of the neighboring high contrast pixels
                 mean = np.mean(vals)
                 std = np.std(vals)
 
-                # Pixel classification rule (Equation 2 from Su et al.)
+                # pixel classification rule (equation 2 from Su et al.)
                 if img[y, x] <= mean + std / 2:
-                    bin_img[y, x] = 0 # Foreground (text)
+                    bin_img[y, x] = 0 # foreground (text)
                 else:
-                    bin_img[y, x] = 255 # Background
+                    bin_img[y, x] = 255 # background
             else:
-                bin_img[y, x] = 255 # Not enough high contrast neighbors - assume background
+                bin_img[y, x] = 255 # not enough high contrast neighbors so assume background
 
     return bin_img
 
@@ -227,7 +227,7 @@ def evaluate_metrics(pred, gt, isPredictionBinarized=False):
         "PSNR": psnr
     }
 
-# -------- Batch Binarization of DIBCO2009 --------
+# -------- batch binarization of DIBCO2009 --------
 
 # Paths to input and ground truth files
 input_folder = os.path.join("dibco2009","input")
@@ -240,14 +240,21 @@ gt_files = sorted(glob.glob(os.path.join(current_dir, gt_folder, "*.tif")))
 print("Input files found:", input_files)
 print("Ground truth files found:", gt_files)
 
-# Collect metrics for all the images
+# collect metrics for all the images
 all_metrics = []
+
+# make output directory
+os.makedirs("dibco2009/su_outputs", exist_ok=True)
 
 for input_path, gt_path in zip(input_files, gt_files):
     img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
     gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
 
     bin_img = su_binarization(img)
+
+    # save binarized image
+    output_filename = os.path.basename(input_path)
+    cv2.imwrite(os.path.join("dibco2009/su_outputs", output_filename), bin_img)
 
     metrics = evaluate_metrics(bin_img, gt)
     metrics["Image"] = os.path.basename(input_path)
@@ -259,7 +266,7 @@ results_df = pd.DataFrame(all_metrics)
 print("\nAverage metrics over all images:")
 print(results_df.mean(numeric_only=True))
 
-# Save to CSV
+# save to CSV
 results_df.to_csv("binarization_results.csv", index=False)
 print("\nResults saved to binarization_results.csv")
 
