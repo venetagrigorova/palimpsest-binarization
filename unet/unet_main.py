@@ -127,7 +127,7 @@ def load_and_train():
     #show_batch(data_loader)
     #show_all_patches(data_loader)
     
-    # Your model
+    # Load model
     model = UNet(in_channels=1, out_channels=1)
     model_path = os.path.join(current_dir, "unet_binarization_try1_epD.pth")
     # Use GPU if available
@@ -138,12 +138,11 @@ def load_and_train():
 
     # Train!
     model = train_model(model, data_loader, device, epochs=20)
-    
 
-def main():
+def load_and_evaluate(model_file, image_file, mask_file):
     # load model from file
     current_dir = os.path.dirname(__file__)
-    model_path = os.path.join(current_dir, "unet_binarization_try1_epDP3.pth")
+    model_path = os.path.join(current_dir, model_file)
     print("Looking for model file at:", model_path)
     model = UNet(in_channels=1, out_channels=1)
     model.load_state_dict(torch.load(model_path, map_location='cpu'))  # or 'cuda'
@@ -154,12 +153,18 @@ def main():
     model.eval()
     
     ## Evalute
-    image_dir = os.path.join(current_dir, "data", "test", "image", "dibco_img0010.tif")
-    mask_dir = os.path.join(current_dir, "data", "test", "mask", "dibco_img0010_gt.tif")
+    image_dir = os.path.join(current_dir, "data", "test", "image", image_file)
+    mask_dir = os.path.join(current_dir, "data", "test", "mask", mask_file)
     image = cv2.imread(image_dir, cv2.IMREAD_GRAYSCALE) / 255.0
     mask = cv2.imread(mask_dir, cv2.IMREAD_GRAYSCALE) / 255.0
     
-    compare_prediction_to_ground_truth(model, image, mask, device)
+    compare_prediction_to_ground_truth(model, image, mask, device)      
+
+def main():
+    #load_and_train()
+    load_and_evaluate("unet_binarization_try1_epDP3.pth", "dibco_img0010.tif", "dibco_img0010_gt.tif")
+    
+    
     
 if __name__ == "__main__":
     main()
