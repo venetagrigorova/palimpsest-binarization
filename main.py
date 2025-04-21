@@ -284,6 +284,10 @@ model.eval()
 patch_size = 256
 threshold = 0.5
 all_metrics_unet = []
+
+# make output directory for unet output
+os.makedirs("dibco2009/unet_outputs", exist_ok=True)
+
 for input_path, gt_path in zip(input_files, gt_files):
     image = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE) / 255.0
     gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
@@ -314,6 +318,11 @@ for input_path, gt_path in zip(input_files, gt_files):
     full_pred = unpatchify(pred_patches, padded_image.shape)
     full_pred = full_pred[:H, :W]
     binary_pred = (full_pred < threshold).astype(np.float32)
+    pred_with_black_foreground = (full_pred >= threshold).astype(np.float32)
+
+    # save binarized unet image
+    output_filename = os.path.basename(input_path)
+    cv2.imwrite(os.path.join("dibco2009/unet_outputs", output_filename), pred_with_black_foreground)
     
     metrics = evaluate_metrics(binary_pred, gt, isPredictionBinarized=True)
     metrics["Image"] = os.path.basename(input_path)
