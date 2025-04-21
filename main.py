@@ -233,11 +233,18 @@ gt_files = sorted(glob.glob(os.path.join(gt_folder, "*.tif")))
 # collect metrics for all the images
 all_metrics = []
 
+# make output directory
+os.makedirs("dibco2009/su_outputs", exist_ok=True)
+
 for input_path, gt_path in zip(input_files, gt_files):
     img = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
     gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
 
     bin_img = su_binarization(img)
+
+    # save binarized image
+    output_filename = os.path.basename(input_path)
+    cv2.imwrite(os.path.join("dibco2009/su_outputs", output_filename), bin_img)
 
     metrics = evaluate_metrics(bin_img, gt)
     metrics["Image"] = os.path.basename(input_path)
